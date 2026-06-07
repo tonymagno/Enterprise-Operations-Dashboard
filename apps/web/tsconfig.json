@@ -8,4 +8,7 @@
     "moduleResolution": "bundler",
     "jsx": "preserve"
   }
+  ,
+  "include": ["src/**/*", "**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules"]
 }
