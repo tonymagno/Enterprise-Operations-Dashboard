@@ -5,8 +5,8 @@ class Settings(BaseSettings):
     APP_NAME: str = "Enterprise Operations Dashboard"
 
     DATABASE_URL: str = (
-        "postgresql://postgres:postgres@localhost:5432/enterprise_dashboard"
-    )
+    "postgresql+psycopg://postgres:postgres@localhost:5432/enterprise_dashboard"
+)
 
     SECRET_KEY: str = "development-secret-key"
 
