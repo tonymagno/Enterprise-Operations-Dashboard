@@ -1,29 +1,56 @@
-# Python
+# ── Python / Backend ─────────────────────────
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
-
-# Virtual Environments
+.Python
+*.egg-info/
+dist/
+build/
 .venv/
 .venv-linux/
 venv/
 env/
+*.env
+pyvenv.cfg
 
-# Node
+# ── Alembic ───────────────────────────────────
+# Manter alembic.ini e migrations no repo
+# Ignorar apenas caches
+
+# ── Node / Frontend ──────────────────────────
 node_modules/
-
-# Next.js
 .next/
+.turbo/
 out/
+*.tsbuildinfo
+next-env.d.ts
 
-# Logs
-*.log
-
-# VSCode
-.vscode/
-
-# Environment variables
+# ── Ambiente / Segredos ───────────────────────
 .env
 .env.local
-.env.production
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ── Sistema Operacional ───────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editors ───────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# ── Logs ──────────────────────────────────────
+*.log
+logs/
+
+# ── Docker volumes (local) ────────────────────
+postgres_data/
+
+# ── Git ───────────────────────────────────────
+*.orig
+COMMIT_EDITMSG
