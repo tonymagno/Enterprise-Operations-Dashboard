@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Search, X } from "lucide-react";
 import axios from "axios";
 
 interface TelemetryEvent {
@@ -10,28 +11,36 @@ interface TelemetryEvent {
   severity: string;
 }
 
+const PAGE_SIZE = 8;
+
+const SEVERITY_COLORS: Record<string, string> = {
+  low:    "bg-slate-500/10 text-slate-400 border-slate-500/20",
+  medium: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+  high:   "bg-red-500/10 text-red-400 border-red-500/20",
+};
+
 export default function TelemetryPage() {
-  const [events, setEvents] = useState<TelemetryEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [events,       setEvents]       = useState<TelemetryEvent[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [showModal,    setShowModal]    = useState(false);
+  const [editingEvent, setEditingEvent] = useState<TelemetryEvent | null>(null);
+  const [form, setForm] = useState({ event_type: "", source: "", severity: "medium" });
 
-  const [showModal, setShowModal] = useState(false);
-  const [editingEvent, setEditingEvent] =
-    useState<TelemetryEvent | null>(null);
+  // ── Filtros ───────────────────────────────────────
+  const [search,         setSearch]         = useState("");
+  const [filterSeverity, setFilterSeverity] = useState("");
+  const [currentPage,    setCurrentPage]    = useState(1);
 
-  const [form, setForm] = useState({
-    event_type: "",
-    source: "",
-    severity: "medium",
-  });
+  useEffect(() => { loadEvents(); }, []);
+  useEffect(() => { setCurrentPage(1); }, [search, filterSeverity]);
 
   async function loadEvents() {
     try {
       setLoading(true);
-
-      const response = await axios.get(
-        "http://localhost:8000/telemetry/"
-      );
-
+      const token = localStorage.getItem("access_token");
+      const response = await axios.get("http://localhost:8000/telemetry/", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       setEvents(response.data);
     } catch (error) {
       console.error("Erro ao carregar telemetria:", error);
@@ -40,62 +49,49 @@ export default function TelemetryPage() {
     }
   }
 
-  useEffect(() => {
-    loadEvents();
-  }, []);
+  // ── Filtros + paginação ───────────────────────────
+  const filtered = events.filter((e) => {
+    const matchSearch   = search === "" ||
+      e.event_type.toLowerCase().includes(search.toLowerCase()) ||
+      e.source.toLowerCase().includes(search.toLowerCase());
+    const matchSeverity = filterSeverity === "" || e.severity === filterSeverity;
+    return matchSearch && matchSeverity;
+  });
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated  = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const hasFilters = search !== "" || filterSeverity !== "";
+
+  function clearFilters() { setSearch(""); setFilterSeverity(""); }
+
+  // ── Modal ─────────────────────────────────────────
   function openCreateModal() {
     setEditingEvent(null);
-
-    setForm({
-      event_type: "",
-      source: "",
-      severity: "medium",
-    });
-
+    setForm({ event_type: "", source: "", severity: "medium" });
     setShowModal(true);
   }
 
   function openEditModal(event: TelemetryEvent) {
     setEditingEvent(event);
-
-    setForm({
-      event_type: event.event_type,
-      source: event.source,
-      severity: event.severity,
-    });
-
+    setForm({ event_type: event.event_type, source: event.source, severity: event.severity });
     setShowModal(true);
   }
 
   async function handleSave() {
     try {
+      const token = localStorage.getItem("access_token");
       if (editingEvent) {
-        await axios.put(
-          `http://localhost:8000/telemetry/${editingEvent.id}`,
-          form
-        );
-
-        alert("Evento atualizado com sucesso.");
+        await axios.put(`http://localhost:8000/telemetry/${editingEvent.id}`, form, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
       } else {
-        await axios.post(
-          "http://localhost:8000/telemetry/",
-          form
-        );
-
-        alert("Evento criado com sucesso.");
+        await axios.post("http://localhost:8000/telemetry/", form, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
       }
-
       setShowModal(false);
-
       setEditingEvent(null);
-
-      setForm({
-        event_type: "",
-        source: "",
-        severity: "medium",
-      });
-
+      setForm({ event_type: "", source: "", severity: "medium" });
       loadEvents();
     } catch (error) {
       console.error("Erro ao salvar evento:", error);
@@ -104,19 +100,12 @@ export default function TelemetryPage() {
   }
 
   async function handleDelete(id: number) {
-    const confirmDelete = window.confirm(
-      "Deseja realmente excluir este evento?"
-    );
-
-    if (!confirmDelete) return;
-
+    if (!window.confirm("Deseja realmente excluir este evento?")) return;
     try {
-      await axios.delete(
-        `http://localhost:8000/telemetry/${id}`
-      );
-
-      alert("Evento excluído com sucesso.");
-
+      const token = localStorage.getItem("access_token");
+      await axios.delete(`http://localhost:8000/telemetry/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       loadEvents();
     } catch (error) {
       console.error("Erro ao excluir evento:", error);
@@ -125,180 +114,161 @@ export default function TelemetryPage() {
   }
 
   return (
-    <div style={{ padding: "2rem", color: "white" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "2rem",
-        }}
-      >
-        <h1 style={{ fontSize: "3rem" }}>
-          Telemetria
-        </h1>
+    <div className="p-8 text-white">
 
-        <button
-          onClick={openCreateModal}
-          style={newButtonStyle}
-        >
+      {/* ── Cabeçalho ── */}
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-4xl font-bold">Telemetria</h1>
+          <p className="text-slate-400 text-sm mt-1">
+            {filtered.length} de {events.length} evento{events.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <button onClick={openCreateModal} className="bg-blue-600 px-6 py-3 rounded-lg hover:bg-blue-700 transition font-medium">
           Novo Evento
         </button>
       </div>
 
-      <table
-        style={{
-          width: "100%",
-          borderCollapse: "collapse",
-          background: "#16213e",
-          borderRadius: "10px",
-          overflow: "hidden",
-        }}
-      >
-        <thead>
-          <tr>
-            <th style={thStyle}>ID</th>
-            <th style={thStyle}>Tipo</th>
-            <th style={thStyle}>Origem</th>
-            <th style={thStyle}>Severidade</th>
-            <th style={thStyle}>Ações</th>
-          </tr>
-        </thead>
+      {/* ── Filtros ── */}
+      <div className="flex flex-wrap gap-3 mb-6">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Buscar por tipo ou origem..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-sm outline-none focus:border-blue-500 transition"
+          />
+        </div>
 
-        <tbody>
-          {loading ? (
+        <select
+          value={filterSeverity}
+          onChange={(e) => setFilterSeverity(e.target.value)}
+          className="px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-sm outline-none focus:border-blue-500 transition"
+        >
+          <option value="">Todas as severidades</option>
+          <option value="low">Baixa</option>
+          <option value="medium">Média</option>
+          <option value="high">Alta</option>
+        </select>
+
+        {hasFilters && (
+          <button onClick={clearFilters} className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition">
+            <X size={14} /> Limpar
+          </button>
+        )}
+      </div>
+
+      {/* ── Tabela ── */}
+      <div className="bg-slate-800 rounded-xl overflow-hidden shadow-lg border border-slate-700">
+        <table className="w-full">
+          <thead className="bg-slate-700/80">
             <tr>
-              <td colSpan={5} style={tdStyle}>
-                Carregando...
-              </td>
+              <th className="p-4 text-left text-sm font-semibold text-slate-300">ID</th>
+              <th className="p-4 text-left text-sm font-semibold text-slate-300">Tipo</th>
+              <th className="p-4 text-left text-sm font-semibold text-slate-300">Origem</th>
+              <th className="p-4 text-left text-sm font-semibold text-slate-300">Severidade</th>
+              <th className="p-4 text-center text-sm font-semibold text-slate-300">Ações</th>
             </tr>
-          ) : events.length === 0 ? (
-            <tr>
-              <td colSpan={5} style={tdStyle}>
-                Nenhum evento encontrado
-              </td>
-            </tr>
-          ) : (
-            events.map((event) => (
-              <tr key={event.id}>
-                <td style={tdStyle}>{event.id}</td>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={5} className="p-10 text-center text-slate-400">Carregando...</td></tr>
+            ) : paginated.length === 0 ? (
+              <tr><td colSpan={5} className="p-10 text-center text-slate-400">
+                {hasFilters ? "Nenhum evento encontrado para os filtros aplicados." : "Nenhum evento encontrado."}
+              </td></tr>
+            ) : (
+              paginated.map((event) => (
+                <tr key={event.id} className="border-t border-slate-700 hover:bg-slate-700/30 transition">
+                  <td className="p-4 text-slate-400 text-sm">{event.id}</td>
+                  <td className="p-4 font-medium">{event.event_type}</td>
+                  <td className="p-4 text-slate-300">{event.source}</td>
+                  <td className="p-4">
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium border ${SEVERITY_COLORS[event.severity] ?? SEVERITY_COLORS.medium}`}>
+                      {event.severity === "low" ? "Baixa" : event.severity === "medium" ? "Média" : "Alta"}
+                    </span>
+                  </td>
+                  <td className="p-4 text-center">
+                    <button onClick={() => openEditModal(event)} className="text-yellow-400 mr-4 hover:text-yellow-300 text-sm font-medium transition">Editar</button>
+                    <button onClick={() => handleDelete(event.id)} className="text-red-400 hover:text-red-300 text-sm font-medium transition">Excluir</button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
 
-                <td style={tdStyle}>
-                  {event.event_type}
-                </td>
-
-                <td style={tdStyle}>
-                  {event.source}
-                </td>
-
-                <td style={tdStyle}>
-                  {event.severity}
-                </td>
-
-                <td style={tdStyle}>
-                  <button
-                    onClick={() =>
-                      openEditModal(event)
-                    }
-                    style={editButtonStyle}
-                  >
-                    Editar
+      {/* ── Paginação ── */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-6">
+          <span className="text-slate-400 text-sm">
+            Página {currentPage} de {totalPages} — {filtered.length} resultado{filtered.length !== 1 ? "s" : ""}
+          </span>
+          <div className="flex gap-2">
+            <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}
+              className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition">
+              ← Anterior
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+              .reduce<(number | "...")[]>((acc, p, idx, arr) => {
+                if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push("...");
+                acc.push(p); return acc;
+              }, [])
+              .map((p, idx) =>
+                p === "..." ? (
+                  <span key={`e-${idx}`} className="px-3 py-2 text-slate-500 text-sm">...</span>
+                ) : (
+                  <button key={p} onClick={() => setCurrentPage(p as number)}
+                    className={`px-4 py-2 rounded-lg text-sm border transition ${currentPage === p ? "bg-blue-600 border-blue-600 text-white" : "bg-slate-800 border-slate-700 hover:bg-slate-700"}`}>
+                    {p}
                   </button>
+                )
+              )}
+            <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
+              className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition">
+              Próxima →
+            </button>
+          </div>
+        </div>
+      )}
 
-                  <button
-                    onClick={() =>
-                      handleDelete(event.id)
-                    }
-                    style={deleteButtonStyle}
-                  >
-                    Excluir
-                  </button>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-
+      {/* ── Modal ── */}
       {showModal && (
-        <div style={overlayStyle}>
-          <div style={modalStyle}>
-            <h2 style={{ marginBottom: "1.5rem" }}>
-              {editingEvent
-                ? "Editar Evento"
-                : "Novo Evento"}
+        <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-50 px-4">
+          <div className="bg-slate-800 p-8 rounded-xl w-full max-w-md shadow-2xl border border-slate-700">
+            <h2 className="text-2xl font-bold mb-6">
+              {editingEvent ? "Editar Evento" : "Novo Evento"}
             </h2>
-
-            <input
-              placeholder="Tipo do Evento"
-              value={form.event_type}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  event_type: e.target.value,
-                })
-              }
-              style={inputStyle}
-            />
-
-            <input
-              placeholder="Origem"
-              value={form.source}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  source: e.target.value,
-                })
-              }
-              style={inputStyle}
-            />
-
-            <select
-              value={form.severity}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  severity: e.target.value,
-                })
-              }
-              style={inputStyle}
-            >
-              <option value="low">
-                Baixa
-              </option>
-
-              <option value="medium">
-                Média
-              </option>
-
-              <option value="high">
-                Alta
-              </option>
-            </select>
-
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: "1rem",
-                marginTop: "1rem",
-              }}
-            >
-              <button
-                onClick={() =>
-                  setShowModal(false)
-                }
-                style={cancelButton}
+            <div className="space-y-4">
+              <input
+                className="w-full p-3 bg-slate-700 rounded-lg outline-none border border-slate-600 focus:border-blue-500 transition"
+                placeholder="Tipo do Evento"
+                value={form.event_type}
+                onChange={(e) => setForm({ ...form, event_type: e.target.value })}
+              />
+              <input
+                className="w-full p-3 bg-slate-700 rounded-lg outline-none border border-slate-600 focus:border-blue-500 transition"
+                placeholder="Origem"
+                value={form.source}
+                onChange={(e) => setForm({ ...form, source: e.target.value })}
+              />
+              <select
+                className="w-full p-3 bg-slate-700 rounded-lg outline-none border border-slate-600 focus:border-blue-500 transition"
+                value={form.severity}
+                onChange={(e) => setForm({ ...form, severity: e.target.value })}
               >
-                Cancelar
-              </button>
-
-              <button
-                onClick={handleSave}
-                style={saveButton}
-              >
-                Salvar
-              </button>
+                <option value="low">Baixa</option>
+                <option value="medium">Média</option>
+                <option value="high">Alta</option>
+              </select>
+            </div>
+            <div className="flex justify-end gap-4 mt-8">
+              <button onClick={() => setShowModal(false)} className="px-5 py-2 bg-slate-600 rounded-lg hover:bg-slate-500 transition">Cancelar</button>
+              <button onClick={handleSave} className="px-5 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition">Salvar</button>
             </div>
           </div>
         </div>
@@ -306,82 +276,3 @@ export default function TelemetryPage() {
     </div>
   );
 }
-
-const thStyle = {
-  padding: "1rem",
-  textAlign: "left" as const,
-  background: "#1f2a44",
-};
-
-const tdStyle = {
-  padding: "1rem",
-  borderTop: "1px solid #2d3748",
-};
-
-const inputStyle = {
-  width: "100%",
-  padding: "12px",
-  marginBottom: "1rem",
-  background: "#334155",
-  border: "none",
-  borderRadius: "8px",
-  color: "white",
-};
-
-const newButtonStyle = {
-  background: "#2563eb",
-  color: "#fff",
-  border: "none",
-  padding: "12px 20px",
-  borderRadius: "8px",
-  cursor: "pointer",
-};
-
-const editButtonStyle = {
-  background: "transparent",
-  color: "#facc15",
-  border: "none",
-  cursor: "pointer",
-  marginRight: "10px",
-};
-
-const deleteButtonStyle = {
-  background: "transparent",
-  color: "#ef4444",
-  border: "none",
-  cursor: "pointer",
-};
-
-const overlayStyle = {
-  position: "fixed" as const,
-  inset: 0,
-  background: "rgba(0,0,0,0.7)",
-  display: "flex",
-  justifyContent: "center",
-  alignItems: "center",
-  zIndex: 1000,
-};
-
-const modalStyle = {
-  background: "#1f2a44",
-  padding: "2rem",
-  borderRadius: "12px",
-  width: "500px",
-  color: "white",
-};
-
-const cancelButton = {
-  padding: "10px 20px",
-  border: "none",
-  borderRadius: "8px",
-  cursor: "pointer",
-};
-
-const saveButton = {
-  padding: "10px 20px",
-  background: "#2563eb",
-  color: "#fff",
-  border: "none",
-  borderRadius: "8px",
-  cursor: "pointer",
-};
