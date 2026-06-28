@@ -13,6 +13,7 @@ import {
   ChevronRight,
   LogOut,
   User,
+  UserCircle,
 } from "lucide-react";
 
 const menuItems = [
@@ -21,6 +22,7 @@ const menuItems = [
   { title: "Roles",     href: "/roles",     icon: ShieldCheck },
   { title: "Alerts",    href: "/alerts",    icon: Bell },
   { title: "Telemetry", href: "/telemetry", icon: Activity },
+  { title: "Perfil",    href: "/profile",   icon: UserCircle },
 ];
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -131,9 +133,9 @@ function NavItem({ title, href, icon: Icon, active, collapsed }: NavItemProps) {
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
+  const router   = useRouter();
   const [collapsed, setCollapsed] = useState(false);
-  const [userName, setUserName] = useState("Admin");
+  const [userName, setUserName]   = useState("Admin");
 
   useEffect(() => {
     setUserName(getUserNameFromToken());
@@ -149,7 +151,6 @@ export default function Sidebar() {
     <aside
       style={{
         width: collapsed ? "90px" : "260px",
-        // ← MUDANÇA PRINCIPAL: sticky em vez de fixed
         position: "sticky",
         top: 0,
         height: "100vh",
