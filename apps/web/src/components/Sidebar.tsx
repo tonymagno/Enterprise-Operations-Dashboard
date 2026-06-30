@@ -194,11 +194,13 @@ export default function Sidebar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  function handleLogout() {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    router.push("/login");
-  }
+function handleLogout() {
+  localStorage.removeItem("access_token");
+  localStorage.removeItem("refresh_token");
+  document.cookie = "access_token=; path=/; max-age=0";
+  document.cookie = "refresh_token=; path=/; max-age=0";
+  router.push("/login");
+}
 
   return (
     <aside style={{

@@ -24,6 +24,9 @@ export default function LoginPage() {
 
       localStorage.setItem("access_token",  data.access_token);
       localStorage.setItem("refresh_token", data.refresh_token);
+      // Salva também em cookie para o Middleware conseguir ler
+      document.cookie = `access_token=${data.access_token}; path=/; max-age=1800; SameSite=Strict`;
+      document.cookie = `refresh_token=${data.refresh_token}; path=/; max-age=604800; SameSite=Strict`;
 
       window.location.href = "/dashboard";
     } catch {
